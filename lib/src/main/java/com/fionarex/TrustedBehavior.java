@@ -7,6 +7,8 @@ import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.AbstractBehavior;
 import akka.actor.typed.javadsl.Receive;
 
+import java.util.List;
+
 public final class TrustedBehavior<T> extends AbstractBehavior<TrustedBehavior.Envelope<T>> {
     public static final class Envelope<T> {
         private final T payload;
@@ -42,29 +44,33 @@ public final class TrustedBehavior<T> extends AbstractBehavior<TrustedBehavior.E
     private TrustContext trustContext;
     private final Logic<T> logic;
     private final TrustInferencePolicy inferencePolicy;
+    private final TrustRuleEngine<T> ruleEngine;
 
     private TrustedBehavior(
             ActorContext<Envelope<T>> ctx,
             TrustContext initialTrustContext,
             Logic<T> logic,
-            TrustInferencePolicy inferencePolicy) {
+            TrustInferencePolicy inferencePolicy,
+            TrustRuleEngine<T> ruleEngine) {
         super(ctx);
         this.trustContext = initialTrustContext;
         this.logic = logic;
         this.inferencePolicy = inferencePolicy;
+        this.ruleEngine = ruleEngine;
     }
 
-    public static <T> Behavior<Envelope<T>> create(
-            TrustContext initialTrustContext,
-            Logic<T> logic) {
-        throw new IllegalStateException("No default policy is available.");
-    }
-
+    // Force explicit policy + rules
     public static <T> Behavior<Envelope<T>> create(
             TrustContext initialTrustContext,
             Logic<T> logic,
-            TrustInferencePolicy inferencePolicy) {
-        return Behaviors.setup(ctx -> new TrustedBehavior<>(ctx, initialTrustContext, logic, inferencePolicy));
+            TrustInferencePolicy inferencePolicy,
+            List<TrustRule<T>> rules) {
+        return Behaviors.setup(ctx -> new TrustedBehavior<>(
+                ctx,
+                initialTrustContext,
+                logic,
+                inferencePolicy,
+                new TrustRuleEngine<>(rules)));
     }
 
     @Override
@@ -76,24 +82,16 @@ public final class TrustedBehavior<T> extends AbstractBehavior<TrustedBehavior.E
     }
 
     private Behavior<Envelope<T>> onEnvelope(Envelope<T> env) {
+
         ActorRef<?> sender = env.sender();
         if (sender != null) {
             trustContext = trustContext.updated(sender, env.trust());
 
-            TrustEvent inferredEvent = inferEventFromMessage(env);
+            TrustEvent inferredEvent = ruleEngine.evaluate(env, trustContext);
             if (inferredEvent != null) {
                 trustContext = trustContext.inferred(sender, inferredEvent, inferencePolicy);
             }
         }
-
         return logic.onMessage(getContext(), env, trustContext);
-    }
-
-    private TrustEvent inferEventFromMessage(Envelope<T> env) {
-        if (env.payload() == null) {
-            return new TrustEvent(TrustEvent.Type.MALFORMED);
-        }
-
-        return new TrustEvent(TrustEvent.Type.SUCCESS);
     }
 }
