@@ -4,12 +4,12 @@ import com.fionarex.*;
 import akka.actor.typed.ActorRef;
 
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.HashMap;
 
 public final class RateLimitRule<T> implements TrustRule<T> {
 
     private final int maxPerSecond;
-    private final Map<ActorRef<?>, Counter> counters = new ConcurrentHashMap<>();
+    private final Map<ActorRef<?>, Counter> counters = new HashMap<>();
 
     public RateLimitRule(int maxPerSecond) {
         this.maxPerSecond = maxPerSecond;

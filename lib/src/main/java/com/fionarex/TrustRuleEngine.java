@@ -16,6 +16,6 @@ public final class TrustRuleEngine<T> {
                 return event;
             }
         }
-        return new TrustEvent(TrustEvent.Type.SUCCESS);
+        return new TrustEvent(TrustEvent.Type.SUCCESS, 0.0);
     }
 }

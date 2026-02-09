@@ -15,6 +15,7 @@ public final class FileBasedInferencePolicy implements TrustInferencePolicy {
             case FAILURE -> cfg.failure;
             case MALFORMED -> cfg.malformed;
             case HEARTBEAT -> cfg.heartbeat;
+            case FORGIVE -> event.amount();
         };
 
         return current.combine(TrustValue.of(delta), 1.0, 1.0);
