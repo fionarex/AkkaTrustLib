@@ -45,32 +45,36 @@ public final class TrustedBehavior<T> extends AbstractBehavior<TrustedBehavior.E
     private final Logic<T> logic;
     private final TrustInferencePolicy inferencePolicy;
     private final TrustRuleEngine<T> ruleEngine;
+    private double blockThreshold;
 
     private TrustedBehavior(
             ActorContext<Envelope<T>> ctx,
             TrustContext initialTrustContext,
             Logic<T> logic,
             TrustInferencePolicy inferencePolicy,
-            TrustRuleEngine<T> ruleEngine) {
+            TrustRuleEngine<T> ruleEngine,
+            double blockThreshold) {
         super(ctx);
         this.trustContext = initialTrustContext;
         this.logic = logic;
         this.inferencePolicy = inferencePolicy;
         this.ruleEngine = ruleEngine;
+        this.blockThreshold = blockThreshold;
     }
 
-    // Force explicit policy + rules
     public static <T> Behavior<Envelope<T>> create(
             TrustContext initialTrustContext,
             Logic<T> logic,
             TrustInferencePolicy inferencePolicy,
-            List<TrustRule<T>> rules) {
+            List<TrustRule<T>> rules,
+            double blockThreshold) {
         return Behaviors.setup(ctx -> new TrustedBehavior<>(
                 ctx,
                 initialTrustContext,
                 logic,
                 inferencePolicy,
-                new TrustRuleEngine<>(rules)));
+                new TrustRuleEngine<>(rules),
+                blockThreshold));
     }
 
     @Override
@@ -85,13 +89,24 @@ public final class TrustedBehavior<T> extends AbstractBehavior<TrustedBehavior.E
 
         ActorRef<?> sender = env.sender();
         if (sender != null) {
+
             trustContext = trustContext.updated(sender, env.trust());
 
             TrustEvent inferredEvent = ruleEngine.evaluate(env, trustContext);
             if (inferredEvent != null) {
                 trustContext = trustContext.inferred(sender, inferredEvent, inferencePolicy);
             }
+
+            TrustValue trust = trustContext.get(sender);
+            if (trust.value() < blockThreshold) {
+                getContext().getLog().warn(
+                        "Blocking sender {} due to low trust: {}",
+                        sender, trust.value());
+                return Behaviors.same();
+            }
         }
+
         return logic.onMessage(getContext(), env, trustContext);
     }
+
 }
